@@ -1,0 +1,99 @@
+openapi: 3.0.3
+info:
+  title: App Prices
+  description: Application to obtain prices of different products from various brands, allowing comparison and access to preferred prices.
+  version: v1
+  contact:
+    name: Jhonatan Mallqui Diaz
+    email: jmdiaz190899@gmail.com
+    url: https://github.com/jhonatanMD/
+servers:
+  - url: http://localhost:8080
+    description: Local
+
+paths:
+  /prices:
+    get:
+      tags:
+        - prices
+      description: get list of prices
+      operationId: getPrices
+      parameters:
+        - name: applicationDate
+          in: query
+          required: true
+          description: Date and time of price application
+          schema:
+            type: string
+            format: date-time
+            example: "2025-02-28T12:00:00Z"
+            x-java-annotations:
+              - "@DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)"
+
+        - name: productId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int32
+          description: Product id
+        - name: brandId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int32
+          description: Brand id
+      responses:
+        "200":
+          description: successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceResponse"
+        "404":
+          description: Not Found Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    PriceResponse:
+      type: object
+      properties:
+        productId:
+          type: integer
+          format: int32
+        brandId:
+          type: integer
+          format: int32
+        priceList:
+          type: integer
+          format: int32
+        startDate:
+          type: OffsetDateTime
+        endDate:
+          type: OffsetDateTime
+        price:
+          type: number
+          format: double
+          example: 99.99
+
+    ErrorResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-02-28T16:18:05.355827"
+        status:
+          type: integer
+          example: 404
+        error:
+          type: string
+          example: "Not Found"
+        message:
+          type: string
+          example: "No price available."
