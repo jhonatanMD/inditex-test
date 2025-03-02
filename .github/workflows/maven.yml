@@ -1,0 +1,72 @@
+name: Build and Docker Compose
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  build:
+    name: Build and Deploy to GCP
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v1
+        with:
+          java-version: 17
+          distribution: 'adoptopenjdk'  # Puedes usar 'adoptopenjdk' o 'zulu'
+
+      - name: Set up SSH Key
+        run: |
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > gcp_key
+          chmod 600 gcp_key
+
+      - name: Test SSH Connection
+        run: ssh -i gcp_key -o StrictHostKeyChecking=no macbook@${{ secrets.GCP_VM_IP }} "echo '✅ SSH Connection Successful'"
+
+      - name: Build the application & Run Tests
+        run: mvn clean package test
+
+      - name: Run SonarQube analysis
+        run: |
+          mvn sonar:sonar \
+            -Dsonar.host.url="${{ secrets.SONAR_URL }}" \
+            -Dsonar.login="${{ secrets.SONAR_USER }}" \
+            -Dsonar.password="${{ secrets.SONAR_PASS }}" \
+            -Dsonar.qualitygate.wait=true
+
+      - name: Authenticate with Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v1
+
+      - name: Build Docker Image
+        run: docker build -t inditex-app:latest .
+
+      - name: Remove Old Image from GCP VM
+        run: |
+          ssh -i gcp_key -o StrictHostKeyChecking=no macbook@${{ secrets.GCP_VM_IP }} \
+          "docker stop app || true && docker rm app || true && docker rmi inditex-app:latest || true"
+
+      - name: Copy Docker Image to GCP VM
+        run: |
+          docker save inditex-app:latest | gzip | ssh -i gcp_key -o StrictHostKeyChecking=no macbook@${{ secrets.GCP_VM_IP }} 'gunzip | docker load'
+
+      - name: Deploy Application on GCP VM
+        run: |
+          ssh -i gcp_key -o StrictHostKeyChecking=no macbook@${{ secrets.GCP_VM_IP }} << 'EOF'
+            docker run -d -p 8080:8080 --name app inditex-app:latest
+            sleep 5
+            docker logs app
+          EOF
